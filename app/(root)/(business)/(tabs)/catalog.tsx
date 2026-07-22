@@ -1,14 +1,14 @@
 import React from 'react';
-import { View, Text, ScrollView, TouchableOpacity, Switch } from 'react-native';
+import { View, Text, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { SERVICE_OPTIONS, PICKUP_FEE, DROPOFF_FEE } from '@/constants/services';
 
-const SERVICES = [
-  { name: 'Wash & Fold', desc: 'General cleaning', price: 'GHS 20.00', unit: '/kg', active: true, iconBg: '#dbeafe', iconColor: '#2563EB', icon: 'washing-machine' },
-  { name: 'Dry Clean', desc: 'Suits, dresses, silk', price: 'GHS 15.00', unit: '/item', active: true, iconBg: '#f1f5f9', iconColor: '#64748b', icon: 'hanger' },
-  { name: 'Iron Only', desc: 'Pressed & hung', price: 'GHS 5.00', unit: '/item', active: false, iconBg: '#ffedd5', iconColor: '#ea580c', icon: 'iron-outline' },
-];
-
+/**
+ * Platform service catalog (read-only). Prices are fixed platform-wide —
+ * this is the same table users order from and the backend prices with
+ * (backend: ServicePricing.java, frontend: constants/services.ts).
+ */
 export default function BusinessCatalog() {
   return (
     <SafeAreaView className="flex-1 bg-slate-50">
@@ -16,68 +16,63 @@ export default function BusinessCatalog() {
       <View className="flex-row items-center justify-between px-5 pt-4 pb-3">
         <View className="flex-row items-center gap-2">
           <MaterialCommunityIcons name="washing-machine" size={22} color="#2563EB" />
-          <Text className="text-xl font-extrabold text-blue-600">LaundroManager</Text>
-        </View>
-        <View className="flex-row items-center gap-3">
-          <TouchableOpacity><Ionicons name="search-outline" size={22} color="#0f172a" /></TouchableOpacity>
-          <View className="w-8 h-8 rounded-full bg-slate-200 items-center justify-center">
-            <Ionicons name="person" size={14} color="#64748b" />
-          </View>
+          <Text className="text-xl font-extrabold text-blue-600">Service Catalog</Text>
         </View>
       </View>
 
       <ScrollView className="flex-1 px-5" showsVerticalScrollIndicator={false}>
         <Text className="text-2xl font-extrabold text-slate-900 mb-1">My Services</Text>
-        <Text className="text-slate-500 text-sm mb-5">Manage your laundry offerings and pricing</Text>
+        <Text className="text-slate-500 text-sm mb-5">
+          These are the platform's fixed service categories and prices customers order from.
+        </Text>
 
-        {SERVICES.map((s, i) => (
-          <View key={i} className="bg-white rounded-2xl p-4 mb-3 border border-slate-100" style={{ elevation: 2, shadowColor: '#000', shadowOpacity: 0.06, shadowRadius: 4 }}>
-            <View className="flex-row items-center justify-between mb-3">
-              <View className="flex-row items-center gap-3 flex-1">
-                <View className="w-12 h-12 rounded-xl items-center justify-center" style={{ backgroundColor: s.iconBg }}>
-                  <MaterialCommunityIcons name={s.icon as any} size={24} color={s.iconColor} />
-                </View>
-                <View className="flex-1">
-                  <Text className="font-bold text-slate-900">{s.name}</Text>
-                  <Text className="text-sm text-slate-500">{s.desc}</Text>
-                </View>
-              </View>
-              <TouchableOpacity>
-                <Ionicons name="pencil-outline" size={20} color="#94a3b8" />
-              </TouchableOpacity>
+        {SERVICE_OPTIONS.map((s) => (
+          <View
+            key={s.category}
+            className="bg-white rounded-2xl p-4 mb-3 border border-slate-100 flex-row items-center gap-4"
+            style={{ elevation: 2, shadowColor: '#000', shadowOpacity: 0.06, shadowRadius: 4 }}
+          >
+            <View className="w-12 h-12 rounded-xl bg-blue-50 items-center justify-center">
+              <MaterialCommunityIcons name={s.icon as any} size={24} color="#2563EB" />
             </View>
-            <View className="flex-row items-center justify-between">
-              <View>
-                <Text className="text-xs text-slate-400 mb-0.5">Price</Text>
-                <Text className="font-bold text-blue-600">{s.price} <Text className="text-slate-400 font-normal">{s.unit}</Text></Text>
-              </View>
-              <Switch value={s.active} trackColor={{ true: '#2563EB' }} />
+            <View className="flex-1">
+              <Text className="font-bold text-slate-900">{s.label}</Text>
+              <Text className="text-xs text-slate-500">{s.description}</Text>
+            </View>
+            <View className="items-end">
+              <Text className="font-extrabold text-blue-600">GHS {s.unitPrice.toFixed(2)}</Text>
+              <Text className="text-xs text-slate-400">/item</Text>
             </View>
           </View>
         ))}
 
-        {/* Add service */}
-        <TouchableOpacity className="border-2 border-dashed border-slate-200 rounded-2xl p-6 items-center mb-5">
-          <View className="w-10 h-10 rounded-full bg-slate-100 items-center justify-center mb-2">
-            <Ionicons name="add" size={20} color="#94a3b8" />
+        {/* Delivery fees */}
+        <Text className="text-lg font-bold text-slate-900 mt-4 mb-3">Delivery fees</Text>
+        <View className="bg-white rounded-2xl p-4 mb-3 border border-slate-100">
+          <View className="flex-row items-center justify-between mb-2">
+            <View className="flex-row items-center gap-2">
+              <Ionicons name="arrow-up-circle-outline" size={18} color="#2563EB" />
+              <Text className="text-sm text-slate-600">Pickup (customer → you)</Text>
+            </View>
+            <Text className="font-bold text-slate-900">GHS {PICKUP_FEE.toFixed(2)}</Text>
           </View>
-          <Text className="text-slate-500 font-semibold">Add Another Service</Text>
-        </TouchableOpacity>
+          <View className="flex-row items-center justify-between">
+            <View className="flex-row items-center gap-2">
+              <Ionicons name="arrow-down-circle-outline" size={18} color="#16a34a" />
+              <Text className="text-sm text-slate-600">Delivery (you → customer)</Text>
+            </View>
+            <Text className="font-bold text-slate-900">GHS {DROPOFF_FEE.toFixed(2)}</Text>
+          </View>
+        </View>
 
-        {/* Promo tip */}
-        <View className="bg-blue-600 rounded-2xl p-5 mb-8">
-          <Text className="text-white text-xl font-extrabold mb-2">Optimize your Catalog</Text>
-          <Text className="text-blue-200 text-sm mb-4">Services with descriptive text and accurate itemized pricing see a 15% higher conversion rate from new customers.</Text>
-          <TouchableOpacity className="bg-white rounded-xl px-5 py-2.5 self-start">
-            <Text className="text-blue-600 font-bold text-sm">Learn Best Practices</Text>
-          </TouchableOpacity>
+        <View className="bg-blue-50 rounded-2xl p-4 mb-8 border border-blue-100 flex-row gap-3">
+          <Ionicons name="information-circle-outline" size={20} color="#2563EB" />
+          <Text className="text-xs text-blue-700 flex-1">
+            Rider fees are paid by the customer and go to the rider after each delivery leg is confirmed.
+            Your revenue is the service subtotal, settled to your Paystack subaccount.
+          </Text>
         </View>
       </ScrollView>
-
-      {/* FAB */}
-      <TouchableOpacity className="absolute bottom-24 right-5 w-14 h-14 bg-blue-600 rounded-full items-center justify-center" style={{ elevation: 4 }}>
-        <Ionicons name="add" size={28} color="#fff" />
-      </TouchableOpacity>
     </SafeAreaView>
   );
 }

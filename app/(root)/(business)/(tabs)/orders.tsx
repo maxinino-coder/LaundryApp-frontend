@@ -3,7 +3,7 @@ import { View, Text, ScrollView, TouchableOpacity, Alert, RefreshControl } from 
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { businessApi } from '@/lib/api';
-import SecureStore from 'expo-secure-store';
+import * as SecureStore from 'expo-secure-store';
 import { OrderStatus, Order } from '@/types/type';
 
 const FILTERS = ['All', 'Pending', 'In Progress', 'Ready', 'Delivered'];
@@ -209,8 +209,6 @@ export default function BusinessOrders() {
           <TouchableOpacity onPress={handleSortToggle}>
             <Ionicons name={sortOrder === 'desc' ? 'arrow-down-outline' : 'arrow-up-outline'} size={22} color="#0f172a" />
           </TouchableOpacity>
-          <TouchableOpacity><Ionicons name="search-outline" size={22} color="#0f172a" /></TouchableOpacity>
-          <TouchableOpacity><Ionicons name="notifications-outline" size={22} color="#0f172a" /></TouchableOpacity>
           <View className="w-8 h-8 rounded-full bg-blue-600 items-center justify-center">
             <Ionicons name="person" size={14} color="#fff" />
           </View>
@@ -265,37 +263,37 @@ export default function BusinessOrders() {
                     </Text>
                   </View>
                 </View>
-                <Text className="text-lg font-bold text-slate-900 mb-2">Customer: {order.userId}</Text>
-                
-                {/* ✅ Single OrderItem - NOT an array */}
+                <Text className="text-lg font-bold text-slate-900 mb-2">Order {order.orderNumber}</Text>
+
                 <View className="flex-row items-center gap-4 mb-1">
                   <View className="flex-row items-center gap-1.5">
                     <Ionicons name="layers-outline" size={14} color="#64748b" />
                     <Text className="text-sm text-slate-500">
-                      {order.orderItems?.Quantity || 0} items
+                      {(order.orderItems ?? []).reduce((n, it) => n + (it.quantity || 0), 0)} items
                     </Text>
                   </View>
                   <View className="flex-row items-center gap-1.5">
                     <MaterialCommunityIcons name="cash-multiple" size={14} color="#64748b" />
                     <Text className="text-sm text-slate-500">
-                      {order.orderItems?.LineTotal ? `GHS ${order.orderItems.LineTotal.toFixed(2)}` : 'N/A'}
+                      GHS {Number(order.totalAmount ?? 0).toFixed(2)}
                     </Text>
                   </View>
                 </View>
-                
+
                 <View className="h-px bg-slate-100 my-2" />
-                
-                {/* ✅ Single OrderItem service */}
+
                 <Text className="text-sm text-slate-500 mb-0.5">
-                  Service: {order.orderItems?.serviceCategory || 'Service'}
+                  {(order.orderItems ?? [])
+                    .map(it => `${it.quantity}× ${String(it.serviceCategory).replace(/_/g, ' ')}`)
+                    .join(', ') || 'No items'}
                 </Text>
                 <Text className="text-xs text-slate-400 mb-3">
                   Order Time: {new Date(order.createdAt).toLocaleString()}
                 </Text>
-                
+
                 <View className="flex-row gap-3">
                   {actionButton && (
-                    <TouchableOpacity 
+                    <TouchableOpacity
                       className={`flex-1 rounded-xl py-3 items-center flex-row justify-center gap-2 ${actionButton.color}`}
                       onPress={actionButton.handler}
                     >
@@ -306,8 +304,17 @@ export default function BusinessOrders() {
                     </TouchableOpacity>
                   )}
                   {order.status === OrderStatus.PENDING && (
-                    <TouchableOpacity className="w-12 border border-slate-200 rounded-xl items-center justify-center">
-                      <Text className="text-slate-500 font-bold">···</Text>
+                    <TouchableOpacity
+                      onPress={() =>
+                        Alert.alert('Cancel Order', 'Reject and cancel this order?', [
+                          { text: 'No', style: 'cancel' },
+                          { text: 'Yes, cancel', style: 'destructive',
+                            onPress: () => updateOrderStatus(order.orderId, OrderStatus.CANCELLED) },
+                        ])
+                      }
+                      className="w-12 border border-red-200 rounded-xl items-center justify-center"
+                    >
+                      <Ionicons name="close" size={18} color="#ef4444" />
                     </TouchableOpacity>
                   )}
                 </View>

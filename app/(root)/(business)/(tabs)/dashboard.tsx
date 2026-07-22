@@ -3,6 +3,7 @@ import React, { useEffect, useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, Alert, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { router } from 'expo-router';
 import { Order, OrderStatus,  } from '@/types/type';
 import { businessApi } from '@/lib/api';
 import * as SecureStore from 'expo-secure-store';
@@ -166,18 +167,18 @@ export default function BusinessDashboard() {
 
   // Render order item details
   const renderOrderItems = (order: Order) => {
-    if (!order.orderItems) {
+    if (!order.orderItems || order.orderItems.length === 0) {
       return <Text className="text-xs text-slate-400">No items</Text>;
     }
-    
-      <View key={order.orderId} className="flex-row items-center gap-2">
+
+    return order.orderItems.map((item, idx) => (
+      <View key={`${order.orderId}-${idx}`} className="flex-row items-center gap-2">
         <MaterialCommunityIcons name="washing-machine" size={14} color="#64748b" />
         <Text className="text-sm text-slate-600">
-          {order.orderItems.serviceCategory || 'Service'} x{order.orderItems.Quantity}
-          
+          {String(item.serviceCategory || 'Service').replace(/_/g, ' ')} x{item.quantity}
         </Text>
       </View>
-    
+    ));
   };
 
   // Render action buttons based on order status
@@ -205,11 +206,21 @@ export default function BusinessDashboard() {
       case OrderStatus.ACCEPTED:
         return (
           <View className="flex-row gap-3 mt-3">
-            <TouchableOpacity 
+            <View className="flex-1 bg-slate-100 rounded-xl py-3 items-center">
+              <Text className="text-slate-500 font-bold text-xs">Awaiting pickup by rider…</Text>
+            </View>
+          </View>
+        );
+
+      case OrderStatus.PICKED_UP:
+      case OrderStatus.IN_PROGRESS:
+        return (
+          <View className="flex-row gap-3 mt-3">
+            <TouchableOpacity
               className="flex-1 bg-green-600 rounded-xl py-3 items-center"
               onPress={() => markAsReady(order.orderId)}
             >
-              <Text className="text-white font-bold">Ready for Pickup</Text>
+              <Text className="text-white font-bold">Mark Ready for Delivery</Text>
             </TouchableOpacity>
           </View>
         );
@@ -217,12 +228,9 @@ export default function BusinessDashboard() {
       case OrderStatus.READY:
         return (
           <View className="flex-row gap-3 mt-3">
-            <TouchableOpacity 
-              className="flex-1 bg-blue-600 rounded-xl py-3 items-center"
-              onPress={() => updateOrderStatus(order.orderId, OrderStatus.OUT_FOR_DELIVERY)}
-            >
-              <Text className="text-white font-bold">Assign Rider</Text>
-            </TouchableOpacity>
+            <View className="flex-1 bg-slate-100 rounded-xl py-3 items-center">
+              <Text className="text-slate-500 font-bold text-xs">Waiting for delivery rider…</Text>
+            </View>
           </View>
         );
       
@@ -266,12 +274,14 @@ export default function BusinessDashboard() {
             <Text className="text-xl font-extrabold text-blue-600">QuickClean Pro</Text>
           </View>
           <View className="flex-row items-center gap-3">
-            <TouchableOpacity>
-              <Ionicons name="notifications-outline" size={24} color="#0f172a" />
+            <TouchableOpacity onPress={() => router.push('/(root)/(business)/(tabs)/orders' as any)}>
+              <Ionicons name="receipt-outline" size={24} color="#0f172a" />
             </TouchableOpacity>
-            <View className="w-9 h-9 rounded-full bg-blue-600 items-center justify-center">
-              <Ionicons name="person" size={16} color="#fff" />
-            </View>
+            <TouchableOpacity onPress={() => router.push('/(root)/(business)/(tabs)/admin' as any)}>
+              <View className="w-9 h-9 rounded-full bg-blue-600 items-center justify-center">
+                <Ionicons name="person" size={16} color="#fff" />
+              </View>
+            </TouchableOpacity>
           </View>
         </View>
 
@@ -327,7 +337,7 @@ export default function BusinessDashboard() {
           <View className="px-5 mb-5">
             <View className="flex-row items-center justify-between mb-3">
               <Text className="text-lg font-bold text-slate-900">Active Orders</Text>
-              <TouchableOpacity><Text className="text-blue-600 text-sm font-semibold">View all</Text></TouchableOpacity>
+              <TouchableOpacity onPress={() => router.push('/(root)/(business)/(tabs)/orders' as any)}><Text className="text-blue-600 text-sm font-semibold">View all</Text></TouchableOpacity>
             </View>
             <View className="bg-white rounded-2xl overflow-hidden border border-slate-100">
               <View className="flex-row bg-slate-50 px-4 py-3 border-b border-slate-100">
@@ -389,7 +399,7 @@ export default function BusinessDashboard() {
           <View className="px-5 mb-5">
             <View className="flex-row items-center justify-between mb-3">
               <Text className="text-lg font-bold text-slate-900">Completed Orders</Text>
-              <TouchableOpacity><Text className="text-blue-600 text-sm font-semibold">View all</Text></TouchableOpacity>
+              <TouchableOpacity onPress={() => router.push('/(root)/(business)/(tabs)/orders' as any)}><Text className="text-blue-600 text-sm font-semibold">View all</Text></TouchableOpacity>
             </View>
             <View className="bg-white rounded-2xl overflow-hidden border border-slate-100">
               <View className="flex-row bg-slate-50 px-4 py-3 border-b border-slate-100">

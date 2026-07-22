@@ -4,77 +4,32 @@ import {
   ActivityIndicator, Alert, RefreshControl, SafeAreaView,
 } from 'react-native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import { businessApi } from '@/lib/api';
+import { businessApi, BusinessInfo } from '@/lib/api';
 import * as SecureStore from 'expo-secure-store';
 import { router } from 'expo-router';
 import { clearAuth } from '@/utils/tokenStoreage';
-import { OrderStatus } from '@/types/type';
 
-// ─── Import Components ──────────────────────────────────────
 import BackHeader from '@/components/BackHeader';
-import SettingsList from '@/components/SettingsList';
-import EarningsCard from '@/components/EarningsCard';
-import RecentCustomers from '@/components/RecentCustomers';
-import ProfileForm from '@/components/ProfileForm';
-import PaymentDetailsForm from '@/components/PaymentDetailsForm';
-import ServiceForm from '@/components/ServiceForm';
-import PayoutHistory from '@/components/PayoutHistory';
-import StatsKPI from '@/components/StatsKPI';
-import NotificationToggle from '@/components/NotificationToggle';
+import BusinessProfileForm from '@/components/ProfileForm';
 
-type SettingsPage =
-  | 'main'
-  | 'profile'
-  | 'notifications'
-  | 'payout'
-  | 'staff'
-  | 'analytics'
-  | 'security'
-  | 'services';
-
-const SETTINGS_ITEMS = [
-  { key: 'profile', icon: 'storefront-outline', label: 'Business Profile', subtitle: 'Name, address, hours' },
-  { key: 'services', icon: 'list-outline', label: 'Service Items', subtitle: 'Manage your catalog' },
-  { key: 'notifications', icon: 'notifications-outline', label: 'Notifications', subtitle: 'Push, email, SMS' },
-  { key: 'payout', icon: 'card-outline', label: 'Payout & Earnings', subtitle: 'Bank, MoMo, history' },
-  { key: 'staff', icon: 'people-outline', label: 'Staff Management', subtitle: 'Manage your team' },
-  { key: 'analytics', icon: 'bar-chart-outline', label: 'Analytics', subtitle: 'Revenue, performance' },
-  { key: 'security', icon: 'shield-checkmark-outline', label: 'Security', subtitle: 'Password, 2FA' },
-] as const;
-
-const NOTIFICATION_ITEMS = [
-  { label: 'Push Notifications', sub: 'New orders, status updates', defaultEnabled: true },
-  { label: 'Email Alerts', sub: 'Daily summaries, payouts', defaultEnabled: true },
-  { label: 'SMS Alerts', sub: 'Critical alerts only', defaultEnabled: false },
-];
+type Page = 'main' | 'profile';
 
 export default function BusinessAdmin() {
   const [accountId, setAccountId] = useState<string | null>(null);
-  const [page, setPage] = useState<SettingsPage>('main');
+  const [page, setPage] = useState<Page>('main');
   const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading] = useState(true);
-
-  // Data state
-  const [customers, setCustomers] = useState<any[]>([]);
-  const [payout, setPayout] = useState<any>(null);
-  const [profile, setProfile] = useState<any>(null);
-  const [orders, setOrders] = useState<any[]>([]);
+  const [profile, setProfile] = useState<BusinessInfo | null>(null);
 
   useEffect(() => {
     SecureStore.getItemAsync('account_id').then(id => setAccountId(id));
   }, []);
 
-  const loadAll = useCallback(async () => {
+  const loadProfile = useCallback(async () => {
     if (!accountId) return;
     try {
-      const [c, p, o] = await Promise.all([
-        businessApi.getUsersByPurchased(accountId),
-        businessApi.getBusinessPayout(accountId),
-        businessApi.getOrders(accountId),
-      ]);
-      setCustomers(c ?? []);
-      setPayout(p ?? null);
-      setOrders(o ?? []);
+      const biz = await businessApi.getBusinessInfo(accountId);
+      setProfile(biz ?? null);
     } catch (e: any) {
       console.log('Admin load error:', e.message);
     } finally {
@@ -83,14 +38,12 @@ export default function BusinessAdmin() {
   }, [accountId]);
 
   useEffect(() => {
-    loadAll();
-    const interval = setInterval(loadAll, 15000);
-    return () => clearInterval(interval);
-  }, [loadAll]);
+    loadProfile();
+  }, [loadProfile]);
 
   const onRefresh = async () => {
     setRefreshing(true);
-    await loadAll();
+    await loadProfile();
     setRefreshing(false);
   };
 
@@ -107,158 +60,31 @@ export default function BusinessAdmin() {
     ]);
   };
 
-  // ─── SUB-PAGES ─────────────────────────────────────────────
-
-  // Profile Page
+  // ─── Profile / update page ──────────────────────────────────
   if (page === 'profile') {
     return (
       <SafeAreaView className="flex-1 bg-slate-50">
         <BackHeader title="Business Profile" onBack={() => setPage('main')} />
-        <ProfileForm accountId={accountId!} profile={profile} onUpdate={loadAll} />
+        <BusinessProfileForm accountId={accountId!} profile={profile} onUpdate={loadProfile} />
       </SafeAreaView>
     );
   }
 
-  // Payout Page
-  if (page === 'payout') {
+  // ─── Main page — current account info only ──────────────────
+  if (loading) {
     return (
-      <SafeAreaView className="flex-1 bg-slate-50">
-        <BackHeader title="Payout Settings" onBack={() => setPage('main')} />
-        <ScrollView className="flex-1 px-5 pt-5">
-          {/* Earnings summary */}
-          {payout ? (
-            <View className="bg-blue-600 rounded-2xl p-5 mb-5">
-              <Text className="text-blue-200 text-sm mb-1">Total Net Payout</Text>
-              <Text className="text-white text-4xl font-extrabold mb-3">
-                GHS {payout.totalNetPayout?.toFixed(2) ?? '0.00'}
-              </Text>
-              <View className="flex-row gap-4">
-                {[
-                  { label: 'Revenue', value: payout.totalRevenue },
-                  { label: 'Commission', value: payout.totalCommission },
-                  { label: 'Rider Fees', value: payout.totalRiderFee },
-                ].map((s, i) => (
-                  <View key={i} className="flex-1 bg-white/10 rounded-xl p-3">
-                    <Text className="text-blue-200 text-xs mb-1">{s.label}</Text>
-                    <Text className="text-white font-bold text-sm">GHS {s.value?.toFixed(2)}</Text>
-                  </View>
-                ))}
-              </View>
-            </View>
-          ) : (
-            <ActivityIndicator color="#2563EB" style={{ marginVertical: 20 }} />
-          )}
-
-          <Text className="text-lg font-bold text-slate-900 mb-3">Payout History</Text>
-          <PayoutHistory payouts={payout?.payouts} />
-
-          <Text className="text-lg font-bold text-slate-900 mt-4 mb-3">Payment Details</Text>
-          <PaymentDetailsForm accountId={accountId!} profile={{}} />
-        </ScrollView>
+      <SafeAreaView className="flex-1 bg-slate-50 items-center justify-center">
+        <ActivityIndicator size="large" color="#2563EB" />
       </SafeAreaView>
     );
   }
-
-  // Analytics Page
-  if (page === 'analytics') {
-    const delivered = orders.filter(o => o.status === OrderStatus.DELIVERED);
-    const cancelled = orders.filter(o => o.status === OrderStatus.CANCELLED);
-    const totalRev = delivered.reduce((s, o) => s + (o.totalAmount ?? 0), 0);
-    const avgOrder = delivered.length ? totalRev / delivered.length : 0;
-
-    const stats = [
-      { label: 'Total Orders', value: String(orders.length), color: '#dbeafe' },
-      { label: 'Completed', value: String(delivered.length), color: '#dcfce7' },
-      { label: 'Cancelled', value: String(cancelled.length), color: '#fee2e2' },
-      { label: 'Customers', value: String(customers.length), color: '#fef3c7' },
-    ];
-
-    return (
-      <SafeAreaView className="flex-1 bg-slate-50">
-        <BackHeader title="Analytics" onBack={() => setPage('main')} />
-        <ScrollView className="flex-1 px-5 pt-5">
-          <StatsKPI stats={stats} />
-
-          <View className="bg-blue-600 rounded-2xl p-5 mb-5">
-            <Text className="text-blue-200 text-sm mb-1">Total Revenue</Text>
-            <Text className="text-white text-4xl font-extrabold">GHS {totalRev.toFixed(2)}</Text>
-            <Text className="text-blue-200 text-sm mt-2">Avg order: GHS {avgOrder.toFixed(2)}</Text>
-          </View>
-
-          {payout && (
-            <View className="bg-white rounded-2xl p-5 mb-5 border border-slate-100">
-              <Text className="text-slate-500 text-sm mb-1">Net Payout (after fees)</Text>
-              <Text className="text-slate-900 text-3xl font-extrabold">
-                GHS {payout.totalNetPayout?.toFixed(2)}
-              </Text>
-              <View className="h-px bg-slate-100 my-3" />
-              <View className="flex-row justify-between">
-                <Text className="text-slate-400 text-sm">Pending payouts</Text>
-                <Text className="font-bold text-orange-600">{payout.pendingCount}</Text>
-              </View>
-              <View className="flex-row justify-between mt-1">
-                <Text className="text-slate-400 text-sm">Settled payouts</Text>
-                <Text className="font-bold text-green-600">{payout.settledCount}</Text>
-              </View>
-            </View>
-          )}
-
-          <Text className="text-lg font-bold text-slate-900 mb-3">Recent Customers</Text>
-          <RecentCustomers customers={customers} />
-        </ScrollView>
-      </SafeAreaView>
-    );
-  }
-
-  // Services Page
-  if (page === 'services') {
-    return (
-      <SafeAreaView className="flex-1 bg-slate-50">
-        <BackHeader title="Service Items" onBack={() => setPage('main')} />
-        <ScrollView className="flex-1 px-5 pt-5">
-          <ServiceForm accountId={accountId!} onSuccess={loadAll} />
-        </ScrollView>
-      </SafeAreaView>
-    );
-  }
-
-  // Notifications Page
-  if (page === 'notifications') {
-    return (
-      <SafeAreaView className="flex-1 bg-slate-50">
-        <BackHeader title="Notifications" onBack={() => setPage('main')} />
-        <ScrollView className="flex-1 px-5 pt-5">
-          <NotificationToggle items={NOTIFICATION_ITEMS} />
-        </ScrollView>
-      </SafeAreaView>
-    );
-  }
-
-  // Security Page
-  if (page === 'security') {
-    // ... keep existing security page code (unchanged)
-  }
-
-  // Staff Page
-  if (page === 'staff') {
-    // ... keep existing staff page code (unchanged)
-  }
-
-  // ─── MAIN PAGE ─────────────────────────────────────────────
-
-  const pendingCount = orders.filter(o => o.status === OrderStatus.PENDING).length;
-  const deliveredCount = orders.filter(o => o.status === OrderStatus.DELIVERED).length;
-  const totalRevenue = orders
-    .filter(o => o.status === OrderStatus.DELIVERED)
-    .reduce((s, o) => s + (o.totalAmount ?? 0), 0);
 
   return (
     <SafeAreaView className="flex-1 bg-slate-50">
-      {/* Header */}
       <View className="flex-row items-center justify-between px-5 pt-4 pb-3">
         <View className="flex-row items-center gap-2">
           <MaterialCommunityIcons name="washing-machine" size={22} color="#2563EB" />
-          <Text className="text-xl font-extrabold text-blue-600">Admin</Text>
+          <Text className="text-xl font-extrabold text-blue-600">Account</Text>
         </View>
         <TouchableOpacity onPress={onRefresh}>
           <Ionicons name="refresh-outline" size={22} color="#0f172a" />
@@ -268,27 +94,64 @@ export default function BusinessAdmin() {
       <ScrollView
         showsVerticalScrollIndicator={false}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+        contentContainerStyle={{ paddingBottom: 32 }}
       >
-        <EarningsCard
-          loading={loading}
-          totalEarnings={payout?.totalNetPayout ?? totalRevenue}
-          ordersCount={orders.length}
-          deliveredCount={deliveredCount}
-          pendingCount={pendingCount}
-          customersCount={customers.length}
-        />
+        <View className="px-5">
+          {/* Current account info */}
+          <View className="bg-white rounded-2xl p-5 mb-4 border border-slate-100">
+            <View className="items-center mb-4">
+              <View className="w-16 h-16 rounded-2xl bg-blue-50 items-center justify-center mb-3">
+                <MaterialCommunityIcons name="storefront-outline" size={28} color="#2563EB" />
+              </View>
+              <Text className="text-xl font-extrabold text-slate-900">
+                {profile?.businessName || 'Your Business'}
+              </Text>
+              {profile?.description && (
+                <Text className="text-sm text-slate-500 mt-1 text-center">{profile.description}</Text>
+              )}
+            </View>
 
-        <View className="px-5 mb-5">
-          <Text className="text-lg font-bold text-slate-900 mb-3">Recent Customers</Text>
-          <RecentCustomers customers={customers} />
-        </View>
+            <View className="bg-slate-100 rounded-xl p-3 mb-3">
+              <Text className="text-xs text-slate-400 mb-0.5">Business ID</Text>
+              <Text className="text-sm font-mono text-slate-600">{accountId}</Text>
+            </View>
 
-        <View className="px-5 mb-5">
-          <Text className="text-lg font-bold text-slate-900 mb-3">Settings</Text>
-          <SettingsList items={SETTINGS_ITEMS as any} onPress={(key) => setPage(key as SettingsPage)} />
-        </View>
+            <View className="gap-3">
+              <View className="flex-row items-center gap-3">
+                <Ionicons name="location-outline" size={18} color="#94a3b8" />
+                <Text className="text-sm text-slate-700 flex-1">
+                  {profile?.address ? `${profile.address}, ${profile.city}` : 'No address set'}
+                </Text>
+              </View>
+              <View className="flex-row items-center gap-3">
+                <Ionicons name="time-outline" size={18} color="#94a3b8" />
+                <Text className="text-sm text-slate-700 flex-1">
+                  {profile?.openingTime && profile?.closingTime
+                    ? `${profile.openingTime} – ${profile.closingTime}`
+                    : 'Hours not set'}
+                </Text>
+              </View>
+              <View className="flex-row items-center gap-3">
+                <View className={`w-2 h-2 rounded-full ${profile?.isOpen ? 'bg-green-500' : 'bg-slate-300'}`} />
+                <Text className="text-sm text-slate-700 flex-1">
+                  {profile?.isOpen ? 'Currently open' : 'Currently closed'}
+                </Text>
+              </View>
+            </View>
+          </View>
 
-        <View className="px-5 mb-8">
+          {/* Touchable to open the update form */}
+          <TouchableOpacity
+            onPress={() => setPage('profile')}
+            className="bg-blue-600 rounded-2xl p-4 flex-row items-center justify-between mb-4"
+          >
+            <View className="flex-row items-center gap-3">
+              <Ionicons name="create-outline" size={20} color="#fff" />
+              <Text className="text-white font-bold">Edit Business Profile</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color="#fff" />
+          </TouchableOpacity>
+
           <TouchableOpacity
             onPress={handleLogout}
             className="bg-red-50 rounded-2xl py-4 flex-row items-center justify-center gap-3"
@@ -296,7 +159,6 @@ export default function BusinessAdmin() {
             <Ionicons name="log-out-outline" size={20} color="#ef4444" />
             <Text className="text-red-500 font-bold">Logout</Text>
           </TouchableOpacity>
-          <Text className="text-center text-slate-400 text-xs mt-4">Version 1.0.0</Text>
         </View>
       </ScrollView>
     </SafeAreaView>

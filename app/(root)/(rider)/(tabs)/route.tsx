@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity,
   Alert, ActivityIndicator, Linking,
@@ -8,8 +8,7 @@ import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import Map, { RiderPhase } from '@/components/Map';
 import { riderApi } from '@/lib/api';
-import { AvailableOrder } from '@/types/type';
-import * as SecureStore from 'expo-secure-store';
+import { useUserLocation } from '@/hooks/useUserLocation';
 
 export default function RiderRoute() {
   const params = useLocalSearchParams<{
@@ -29,6 +28,8 @@ export default function RiderRoute() {
   const [confirming, setConfirming] = useState(false);
   const [completing, setCompleting] = useState(false);
 
+  useUserLocation(); // live rider position for the map
+
   // Parse coords from params
   const customerLat = params.customerLat ? parseFloat(params.customerLat) : undefined;
   const customerLng = params.customerLng ? parseFloat(params.customerLng) : undefined;
@@ -36,6 +37,25 @@ export default function RiderRoute() {
   const businessLng = params.businessLng ? parseFloat(params.businessLng) : undefined;
 
   const isToCustomer = phase === 'to_customer';
+
+  // No active job — guide the rider to the jobs board instead of a blank screen
+  if (!params.orderId) {
+    return (
+      <SafeAreaView className="flex-1 bg-slate-50 items-center justify-center px-8">
+        <MaterialCommunityIcons name="map-marker-path" size={56} color="#cbd5e1" />
+        <Text className="text-lg font-bold text-slate-700 mt-4 text-center">No active job</Text>
+        <Text className="text-sm text-slate-400 mt-1 text-center">
+          Apply for a job and get accepted — your route will show up here.
+        </Text>
+        <TouchableOpacity
+          onPress={() => router.push('/(root)/(rider)/(tabs)/jobs' as any)}
+          className="mt-5 bg-blue-600 rounded-xl px-6 py-3"
+        >
+          <Text className="text-white font-bold">Browse jobs</Text>
+        </TouchableOpacity>
+      </SafeAreaView>
+    );
+  }
 
   // Open navigation in maps app
   function openNavigation(lat?: number, lng?: number, label?: string) {
@@ -89,7 +109,7 @@ export default function RiderRoute() {
                 await riderApi.confirmDelivery(params.orderId);
               }
               Alert.alert('Job Complete! 🎉', 'Payment will be processed shortly.', [
-                { text: 'OK', onPress: () => router.replace('/(rider)/(tabs)/jobs' as any) },
+                { text: 'OK', onPress: () => router.replace('/(root)/(rider)/(tabs)/jobs' as any) },
               ]);
             } catch (e: any) {
               Alert.alert('Error', e.message ?? 'Something went wrong');
@@ -115,12 +135,14 @@ export default function RiderRoute() {
           </Text>
         </View>
         <View className="flex-row items-center gap-3">
-          <TouchableOpacity>
-            <Ionicons name="notifications-outline" size={22} color="#0f172a" />
+          <TouchableOpacity onPress={() => router.push('/(root)/(rider)/(tabs)/messages' as any)}>
+            <Ionicons name="chatbubble-outline" size={22} color="#0f172a" />
           </TouchableOpacity>
-          <View className="w-9 h-9 rounded-full bg-blue-600 items-center justify-center">
-            <Ionicons name="person" size={16} color="#fff" />
-          </View>
+          <TouchableOpacity onPress={() => router.push('/(root)/(rider)/(tabs)/profile' as any)}>
+            <View className="w-9 h-9 rounded-full bg-blue-600 items-center justify-center">
+              <Ionicons name="person" size={16} color="#fff" />
+            </View>
+          </TouchableOpacity>
         </View>
       </View>
 
@@ -175,10 +197,10 @@ export default function RiderRoute() {
                 <Ionicons name="navigate-outline" size={16} color="#2563EB" />
                 <Text className="text-blue-600 font-bold text-sm">Navigate</Text>
               </TouchableOpacity>
-              <TouchableOpacity className="w-12 h-12 rounded-xl bg-slate-100 items-center justify-center">
-                <Ionicons name="call-outline" size={20} color="#64748b" />
-              </TouchableOpacity>
-              <TouchableOpacity className="w-12 h-12 rounded-xl bg-slate-100 items-center justify-center">
+              <TouchableOpacity
+                onPress={() => router.push('/(root)/(rider)/(tabs)/messages' as any)}
+                className="w-12 h-12 rounded-xl bg-slate-100 items-center justify-center"
+              >
                 <Ionicons name="chatbubble-outline" size={20} color="#64748b" />
               </TouchableOpacity>
             </View>

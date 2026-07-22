@@ -21,6 +21,10 @@ export async function saveAuthResponse(auth: AuthResponse): Promise<void> {
 export async function getAccessToken(): Promise<string | null> {
   return SecureStore.getItemAsync(KEYS.ACCESS_TOKEN);
 }
+
+export async function getRefreshToken(): Promise<string | null> {
+  return SecureStore.getItemAsync(KEYS.REFRESH_TOKEN);
+}
  
 export async function getRole(): Promise<string | null> {
   return SecureStore.getItemAsync(KEYS.ROLE);

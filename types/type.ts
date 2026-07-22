@@ -1,6 +1,6 @@
 // types/type.ts  — regular TypeScript file, importable everywhere
 
-import { JSX } from "react";
+import { TextInputProps, TouchableOpacityProps } from "react-native";
 
 export interface AvailableOrder {
   orderId: string;
@@ -60,8 +60,10 @@ export interface CreateServiceItemPayload {
   
 }
 export enum ServiceCategory {
-    WASH_AND_FOLD, DRY_CLEAN, IRON_ONLY,
-    WASH_AND_IRON, DUVET, SHOES, OTHER
+  WASH = 'WASH',
+  WASH_FOLD = 'WASH_FOLD',
+  WASH_FOLD_IRON = 'WASH_FOLD_IRON',
+  OTHER = 'OTHER',
 }
 export enum PricingModel {
   PER_ITEM = 'PER_ITEM',
@@ -69,10 +71,18 @@ export enum PricingModel {
 }
 
 
+// Backend serializes the enum as strings ("PENDING", ...), so this must be a string enum
 export enum OrderStatus {
-    PENDING,
-    CONFIRMED, PICKED_UP, IN_PROGRESS,
-    READY, OUT_FOR_DELIVERY, DELIVERED, CANCELLED, REFUNDED,ACCEPTED
+  PENDING = 'PENDING',
+  CONFIRMED = 'CONFIRMED',
+  PICKED_UP = 'PICKED_UP',
+  IN_PROGRESS = 'IN_PROGRESS',
+  READY = 'READY',
+  OUT_FOR_DELIVERY = 'OUT_FOR_DELIVERY',
+  DELIVERED = 'DELIVERED',
+  CANCELLED = 'CANCELLED',
+  REFUNDED = 'REFUNDED',
+  ACCEPTED = 'ACCEPTED',
 }
 
 export interface Order{
@@ -80,8 +90,9 @@ export interface Order{
   orderNumber: string;
   userId: string;
   businessId: string;
-  riderId?: string;
-  status: OrderStatus; 
+  pickUpRiderId?: string;
+  delivaryRiderId?: string;
+  status: OrderStatus;
   pickupAddress: string;
   pickupLat?: number;
   pickupLng?: number;
@@ -92,7 +103,7 @@ export interface Order{
   deliveryTime?: string;
   subtotal: number;
   pickUpFee: number;
-  dropOffFee: number;
+  dropoffFee: number;
   deliveryFee: number;
   discountAmount: number;
   totalAmount: number;
@@ -100,29 +111,32 @@ export interface Order{
   cancelledReason?: string;
   createdAt: string;
   updatedAt: string;
-  orderItems: OrderItem;
-
-  
+  orderItems: OrderItem[];
 }
 
 export interface OrderItem{
-    serviceCategory:ServiceCategory;
-    Quantity:number;
-    UnitPrice: number;
-    LineTotal: number;
-     Notes: string;
-     CreatedAt: Date;
+  serviceCategory: ServiceCategory;
+  quantity: number;
+  unitPrice: number;
+  lineTotal: number;
+  notes?: string;
+  createdAt?: string;
 }
 
 export interface CreateOrderPayload {
+  accountId: string;
   businessId: string;
   pickupAddress: string;
-  deliveryAddress: string;
+  pickupLat?: number;
+  pickupLng?: number;
+  deliveryAddress?: string;
+  deliveryLat?: number;
+  deliveryLng?: number;
   notes?: string;
   items: {
-    serviceItemId: string;
+    serviceCategory: ServiceCategory;
     quantity: number;
-    weightKg?: number;
+    note?: string;
   }[];
 }
 
@@ -139,27 +153,31 @@ export interface UserInfo {
 }
 
 export interface RiderInfo {
-  id: number;
+  id: string;
   firstName: string;
   lastName: string;
   riderType:RiderType;
   vehicleType: VehicleType;
   vehiclePlate?: string;
   isAvailable: boolean;
+  isApproved?: boolean;
   currentLat?: number;
   currentLng?: number;
-  avatar?: string;
-  isVerified: boolean;
-  momoNumber: string;
+  avatarUrl?: string;
+  momoNumber?: string;
+  bankAccountNo?: string;
 }
 
 export interface RideAssignment {
-  id: string;
+  applicationId: string;
   orderId: string;
   riderId: string;
-  status: "PENDING" | "ACCEPTED" | "REJECTED";
+  riderFirstName: string;
+  riderLastName: string;
+  vehicleType?: string;
+  vehiclePlate?: string;
+  status: "PENDING" | "ACCEPTED" | "REJECTED" | "COMPLETED";
   appliedAt: string;
-  completedAt?: string;
 }
 
 export interface Message {
@@ -168,6 +186,20 @@ export interface Message {
   senderId: string;
   body: string;
   isRead?: boolean;
+  createdAt: string;
+}
+
+export interface ConversationSummary {
+  conversationId: string;
+  orderId: string;
+  orderNumber: string;
+  supabaseChannel: string;
+  otherAccountId: string;
+  otherName: string;
+  otherRole: "USER" | "BUSINESS" | "RIDER";
+  lastMessage?: string;
+  lastMessageAt?: string;
+  unreadCount: number;
   createdAt: string;
 }
   
@@ -251,6 +283,32 @@ export interface RoleOption {
   title: string;
   subtitle: string;
   icon: React.ReactNode; // or JSX.Element
+}
+
+export interface RoleCardProps {
+  option: RoleOption;
+  selected: boolean;
+  onPress: () => void;
+}
+
+export interface ButtonProps extends TouchableOpacityProps {
+  title: string;
+  bgVariant?: "primary" | "secondary" | "danger" | "outline" | "success";
+  textVariant?: "primary" | "default" | "secondary" | "danger" | "success";
+  IconLeft?: React.ComponentType<any>;
+  IconRight?: React.ComponentType<any>;
+  className?: string;
+}
+
+export interface InputFieldProps extends TextInputProps {
+  label: string;
+  icon?: any;
+  secureTextEntry?: boolean;
+  labelStyle?: string;
+  containerStyle?: string;
+  inputStyle?: string;
+  iconStyle?: string;
+  className?: string;
 }
 
 export interface BusinessPayoutDTO {

@@ -1,8 +1,8 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity,
   FlatList, KeyboardAvoidingView, Platform,
-  ActivityIndicator, Alert, AppState,
+  ActivityIndicator, Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -18,20 +18,36 @@ const supabase = createClient(
   process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY!
 );
 
+/** Supabase rows arrive snake_case — normalize to the camelCase Message type. */
+function normalizeRealtimeMessage(row: any): Message {
+  return {
+    id: row.id,
+    conversationId: row.conversation_id ?? row.conversationId,
+    senderId: row.sender_id ?? row.senderId,
+    body: row.body,
+    isRead: row.is_read ?? row.isRead,
+    createdAt: row.created_at ?? row.createdAt,
+  };
+}
+
+/**
+ * Shared chat screen used by the user, business, and rider route trees.
+ * Loads history from the backend, then listens on Supabase realtime for
+ * new inserts. Voice: full call flow (start/end + CallLog) — audio itself
+ * requires the Agora native SDK, which needs a dev build (not Expo Go).
+ */
 export default function ChatScreen() {
   const {
     conversationId,
     supabaseChannel,
     otherName,
     otherAccountId,
-    orderId,
     calleeId,
   } = useLocalSearchParams<{
     conversationId: string;
     supabaseChannel?: string;
     otherName?: string;
     otherAccountId?: string;
-    orderId?: string;
     calleeId?: string;
   }>();
 
@@ -44,16 +60,34 @@ export default function ChatScreen() {
   const [isOnCall, setIsOnCall] = useState(false);
   const [callLogId, setCallLogId] = useState<string | null>(null);
   const [callStartTime, setCallStartTime] = useState<number | null>(null);
+  const [callSeconds, setCallSeconds] = useState(0);
 
   const flatRef = useRef<FlatList>(null);
-  const channelRef = useRef<any>(null);
 
   // ── Load current user id ────────────────────────────────
   useEffect(() => {
     SecureStore.getItemAsync('account_id').then(setMyId);
   }, []);
 
-  // ── Subscribe to Supabase realtime ──────────────────────
+  // ── Load message history from the backend ───────────────
+  useEffect(() => {
+    if (!conversationId) return;
+    let cancelled = false;
+    conversationApi
+      .getMessages(conversationId)
+      .then((history) => {
+        if (!cancelled) setMessages(history);
+      })
+      .catch((e) => console.warn('History load failed:', e?.message))
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [conversationId]);
+
+  // ── Subscribe to Supabase realtime for new messages ─────
   useEffect(() => {
     if (!conversationId) return;
 
@@ -68,33 +102,36 @@ export default function ChatScreen() {
           filter: `conversation_id=eq.${conversationId}`,
         },
         (payload) => {
-          const newMsg = payload.new as Message;
+          const newMsg = normalizeRealtimeMessage(payload.new);
           setMessages(prev => {
-            // Avoid duplicate if we already appended optimistically
             if (prev.some(m => m.id === newMsg.id)) return prev;
             return [...prev, newMsg];
           });
           setTimeout(() => flatRef.current?.scrollToEnd({ animated: true }), 100);
         }
       )
-      .subscribe((status) => {
-        console.log('Supabase channel status:', status);
-        setLoading(false);
-      });
-
-    channelRef.current = channel;
+      .subscribe();
 
     return () => {
       supabase.removeChannel(channel);
     };
   }, [conversationId, supabaseChannel]);
 
-  // ── Scroll to bottom when messages load ────────────────
+  // ── Scroll to bottom once history is in ─────────────────
   useEffect(() => {
-    if (messages.length > 0) {
-      setTimeout(() => flatRef.current?.scrollToEnd({ animated: false }), 100);
+    if (!loading && messages.length > 0) {
+      setTimeout(() => flatRef.current?.scrollToEnd({ animated: false }), 150);
     }
-  }, [messages.length === 1]);
+  }, [loading]);
+
+  // ── In-call timer ───────────────────────────────────────
+  useEffect(() => {
+    if (!isOnCall || !callStartTime) return;
+    const t = setInterval(() => {
+      setCallSeconds(Math.floor((Date.now() - callStartTime) / 1000));
+    }, 1000);
+    return () => clearInterval(t);
+  }, [isOnCall, callStartTime]);
 
   // ── Send message ────────────────────────────────────────
   async function send() {
@@ -116,10 +153,8 @@ export default function ChatScreen() {
 
     try {
       const saved = await conversationApi.sendMessage(conversationId, text);
-      // Replace optimistic with real message
       setMessages(prev => prev.map(m => m.id === optimistic.id ? saved : m));
     } catch (e: any) {
-      // Remove optimistic on failure
       setMessages(prev => prev.filter(m => m.id !== optimistic.id));
       setInput(text);
       Alert.alert('Error', e.message ?? 'Failed to send message');
@@ -137,14 +172,11 @@ export default function ChatScreen() {
     }
     setCallLoading(true);
     try {
-      const { token, channel } = await callApi.start(conversationId, targetId);
+      const res = await callApi.start(conversationId, targetId);
+      setCallLogId(res.callLogId);
       setIsOnCall(true);
       setCallStartTime(Date.now());
-      Alert.alert(
-        '📞 Call Started',
-        `Channel: ${channel}\nToken acquired. Integrate Agora SDK to connect audio.`,
-        [{ text: 'End Call', onPress: () => handleEndCall(channel) }]
-      );
+      setCallSeconds(0);
     } catch (e: any) {
       Alert.alert('Call Error', e.message);
     } finally {
@@ -153,32 +185,34 @@ export default function ChatScreen() {
   }
 
   // ── End call ────────────────────────────────────────────
-  async function handleEndCall(channelName?: string) {
-    if (!conversationId || !callLogId) {
-      setIsOnCall(false);
-      return;
-    }
+  async function handleEndCall() {
     const durationSeconds = callStartTime
       ? Math.floor((Date.now() - callStartTime) / 1000)
       : 0;
     try {
-      await callApi.end(conversationId, callLogId, durationSeconds);
+      if (conversationId && callLogId) {
+        await callApi.end(conversationId, callLogId, durationSeconds);
+      }
     } catch (e) {
       console.log('End call error:', e);
     } finally {
       setIsOnCall(false);
       setCallLogId(null);
       setCallStartTime(null);
+      setCallSeconds(0);
     }
   }
+
+  const fmtDuration = (s: number) =>
+    `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 
   // ── Message bubble ──────────────────────────────────────
   const renderItem = ({ item }: { item: Message }) => {
     const isMine = item.senderId === myId;
     const isTemp = item.id.startsWith('temp-');
-    const time = new Date(item.createdAt).toLocaleTimeString([], {
-      hour: '2-digit', minute: '2-digit',
-    });
+    const time = item.createdAt
+      ? new Date(item.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      : '';
 
     return (
       <View className={`mb-3 max-w-[78%] ${isMine ? 'self-end' : 'self-start'}`}>
@@ -211,22 +245,25 @@ export default function ChatScreen() {
           <Ionicons name="arrow-back" size={24} color="#0f172a" />
         </TouchableOpacity>
 
-        {/* Avatar */}
         <View className="w-10 h-10 rounded-full bg-blue-100 items-center justify-center">
           <Ionicons name="person" size={18} color="#2563EB" />
         </View>
 
         <View className="flex-1">
           <Text className="font-bold text-slate-900">{otherName ?? 'Chat'}</Text>
-          <View className="flex-row items-center gap-1">
-            <View className="w-2 h-2 rounded-full bg-green-500" />
-            <Text className="text-xs text-green-500">Online</Text>
-          </View>
+          {isOnCall ? (
+            <View className="flex-row items-center gap-1">
+              <View className="w-2 h-2 rounded-full bg-red-500" />
+              <Text className="text-xs text-red-500">On call • {fmtDuration(callSeconds)}</Text>
+            </View>
+          ) : (
+            <Text className="text-xs text-slate-400">Tap 📞 to call</Text>
+          )}
         </View>
 
         {/* Call button */}
         <TouchableOpacity
-          onPress={isOnCall ? () => handleEndCall() : handleStartCall}
+          onPress={isOnCall ? handleEndCall : handleStartCall}
           disabled={callLoading}
           className={`w-10 h-10 rounded-full items-center justify-center
             ${isOnCall ? 'bg-red-100' : 'bg-blue-50'}`}
@@ -241,6 +278,24 @@ export default function ChatScreen() {
         </TouchableOpacity>
       </View>
 
+      {/* In-call banner */}
+      {isOnCall && (
+        <View className="bg-blue-600 px-5 py-3 flex-row items-center justify-between">
+          <View className="flex-row items-center gap-2">
+            <Ionicons name="call" size={16} color="#fff" />
+            <Text className="text-white font-semibold text-sm">
+              Calling {otherName ?? 'contact'}... {fmtDuration(callSeconds)}
+            </Text>
+          </View>
+          <TouchableOpacity
+            onPress={handleEndCall}
+            className="bg-red-500 rounded-full px-4 py-1.5"
+          >
+            <Text className="text-white font-bold text-xs">End</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         className="flex-1"
@@ -250,7 +305,7 @@ export default function ChatScreen() {
         {loading ? (
           <View className="flex-1 items-center justify-center">
             <ActivityIndicator size="large" color="#2563EB" />
-            <Text className="text-slate-400 text-sm mt-3">Connecting...</Text>
+            <Text className="text-slate-400 text-sm mt-3">Loading messages...</Text>
           </View>
         ) : (
           <FlatList
